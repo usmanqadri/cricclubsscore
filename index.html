@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Overlay Bottom Strip</title>
+  <title>Transparent Overlay Bottom Strip</title>
   <style>
     body {
       margin: 0;
@@ -11,10 +11,10 @@
       display: flex;
       flex-direction: column;
       justify-content: flex-end;
-      background: #fff;
+      background: none; /* transparent background */
     }
 
-    /* Bottom strip container */
+    /* Transparent bottom strip */
     .crop {
       width: 100%;
       height: 100px;
@@ -23,7 +23,8 @@
       bottom: 0;
       left: 0;
       z-index: 999;
-      background: #fff; /* optional background */
+      background: transparent; /* <-- key line */
+      pointer-events: none; /* optional: lets clicks go through */
     }
 
     .crop img {
