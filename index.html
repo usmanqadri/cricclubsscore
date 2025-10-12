@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Overlay Bottom Strip</title>
+  <style>
+    /* Page fills width; only bottom 100px of the image shows */
+    .crop {
+      width: 100%;
+      height: 100px;
+      overflow: hidden;
+      position: relative;
+    }
+    .crop img {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    body { margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="crop">
+    <img
+      src="https://overlayscore.cricclubs.com/overlay?fixtureId=1084&clubId=1003069"
+      alt="CricClubs overlay bottom"
+    />
+  </div>
+</body>
+</html>
