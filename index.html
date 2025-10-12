@@ -5,13 +5,27 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Overlay Bottom Strip</title>
   <style>
-    /* Page fills width; only bottom 100px of the image shows */
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      background: #fff;
+    }
+
+    /* Bottom strip container */
     .crop {
       width: 100%;
       height: 100px;
       overflow: hidden;
-      position: relative;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      z-index: 999;
+      background: #fff; /* optional background */
     }
+
     .crop img {
       position: absolute;
       bottom: 0;
@@ -20,7 +34,6 @@
       height: auto;
       display: block;
     }
-    body { margin: 0; }
   </style>
 </head>
 <body>
