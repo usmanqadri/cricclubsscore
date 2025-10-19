@@ -44,13 +44,23 @@
     const matchId = params.get("matchId");
     const clubId = params.get("clubId");
 
-    // Build overlay image URL dynamically
-    if (matchId && clubId) {
-      const overlayUrl = `https://overlayscore.cricclubs.com/overlay?matchId=${matchId}&clubId=${clubId}`;
-      document.getElementById("overlayImg").src = overlayUrl;
-    } else {
-      console.warn("⚠️ Missing matchId or clubId in the URL query parameters");
+    // Function to update the overlay image
+    function updateOverlay() {
+      if (matchId && clubId) {
+        // Add timestamp to prevent caching
+        const timestamp = new Date().getTime();
+        const overlayUrl = `https://overlayscore.cricclubs.com/overlay?matchId=${matchId}&clubId=${clubId}&t=${timestamp}`;
+        document.getElementById("overlayImg").src = overlayUrl;
+      } else {
+        console.warn("⚠️ Missing matchId or clubId in the URL query parameters");
+      }
     }
+
+    // Initial load
+    updateOverlay();
+
+    // Refresh every 30 seconds
+    setInterval(updateOverlay, 30000);
   </script>
 </body>
 </html>
