@@ -97,6 +97,13 @@
 
     function showHelp(html) { help.innerHTML = html; help.hidden = false; }
 
+    // "42 runs needed in 66 balls with 9 wickets remaining. RRR: 3.82" -> "NEED 42 OFF 66 · RRR 3.82"
+    const chaseLine = info => {
+      const m = String(info).match(/(\d+)\s+runs?\s+needed\s+in\s+(\d+)\s+balls?/i);
+      if (!m) return info;
+      const rrr = String(info).match(/RRR:?\s*([\d.]+)/i);
+      return `NEED ${m[1]} OFF ${m[2]}` + (rrr ? ` · RRR ${rrr[1]}` : '');
+    };
     function render(d) {
       const bat = d.teams[d.batIdx] || {};
       const other = d.teams[1 - d.batIdx] || {};
@@ -116,7 +123,7 @@
       const ballCls = v => /W/i.test(v) ? 'w' : v === '4' ? 'f' : v === '6' ? 's' : /wd|nb|lb|b/i.test(v) ? 'x' : '';
       // In the chase, show CricClubs' "need ..." line; otherwise the fixture.
       const fixture = secondInnings && /need|target|require/i.test(d.info)
-        ? esc(d.info)
+        ? esc(chaseLine(d.info))
         : `${esc((bat.name || '').toUpperCase())} <em>vs</em> ${esc((other.name || '').toUpperCase())}`;
 
       root.innerHTML = `
