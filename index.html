@@ -3,64 +3,184 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Dynamic CricClubs Overlay</title>
+  <title>CricClubs Score Overlay</title>
+  <!--
+    Usage: index.html?matchId=2127&clubId=22909
+    Options: &refresh=15 (seconds)  &scale=1.5  &bg=transparent|00ff00|000000  &pos=bottom|top
+
+    The score is read from https://cricclubs.com/ballbyball.do?matchId=..&clubId=.. opened in a small
+    feed window. cricclubs.com does not let other sites read its pages, and its Cloudflare check blocks
+    it inside iframes, so the "CricClubs Score Overlay" userscript (v3+, Tampermonkey) must be installed
+    in the browser showing this page: it runs in the feed window and posts the parsed score here.
+  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet" />
   <style>
-    body {
-      margin: 0;
-      min-height: 100vh;
-      background: transparent;
-    }
+    html, body { margin: 0; min-height: 100vh; background: var(--bg, #00ff00); overflow: hidden; }
+    em { font-style: normal; }
 
-    .crop {
-      width: 100%;
-      height: 100px;
-      overflow: hidden;
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      z-index: 999;
-      background: transparent;
-      pointer-events: none;
-    }
+    .stage { position: fixed; left: 0; right: 0; display: flex; justify-content: center; padding: 20px 0; }
+    .stage.bottom { bottom: 0; }
+    .stage.top { top: 0; }
 
-    .crop img {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      width: 100%;
-      height: auto;
-      display: block;
-    }
+    #ov { display: inline-flex; align-items: center; zoom: var(--scale, 1);
+      font-family: "Barlow Condensed", "Arial Narrow", Arial, sans-serif; text-transform: uppercase; letter-spacing: .3px; }
+    #ov:empty { display: none; }
+    .panel { background: linear-gradient(#fbfbfc, #e4e7ec); height: 100px; display: flex; flex-direction: column;
+      box-shadow: 0 2px 6px rgba(0,0,0,.35); }
+    .panel.left { width: 430px; border-radius: 4px 0 0 4px; }
+    .panel.right { width: 430px; border-radius: 0 4px 4px 0; }
+    .row { flex: 1; display: flex; align-items: center; padding: 0 18px; color: #1c2a5a; font-size: 22px; font-weight: 600; }
+    .row.top { border-bottom: 1px solid #c9ced8; justify-content: space-between; }
+    .row b { color: #1f6fd1; font-weight: 700; margin-left: 8px; font-size: 24px; }
+    .row small { color: #2b8fd6; font-size: 16px; font-weight: 600; margin-left: 5px; }
+    .bt { display: flex; align-items: baseline; }
+    .bat { display: inline-block; width: 5px; height: 20px; background: #f07a1a; border-radius: 2px; transform: rotate(25deg);
+      margin-right: 10px; align-self: center; }
+    .fixture { justify-content: center; font-size: 19px; color: #2a3550; }
+    .fixture em { color: #2b8fd6; font-size: 14px; margin: 0 8px; }
+    .team-box { background: linear-gradient(#1747d6, #0b2a9a); color: #fff; width: 200px; height: 128px; display: flex;
+      flex-direction: column; justify-content: center; padding: 0 18px; box-sizing: border-box; z-index: 1;
+      box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+    .codes { font-size: 36px; font-weight: 700; line-height: 1; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,.35); }
+    .codes em { font-size: 22px; color: #f5b922; margin-left: 8px; font-weight: 600; }
+    .big { font-size: 64px; font-weight: 700; line-height: 1; padding-top: 6px; }
+    .big em { color: #f5b922; font-size: 44px; }
+    .rate-box { width: 190px; height: 128px; display: flex; flex-direction: column; z-index: 1; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+    .rate-box > div { flex: 1; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 28px; font-weight: 600; }
+    .rate-box b { font-size: 34px; margin-left: 10px; font-weight: 700; }
+    .rr { background: linear-gradient(#2a6fe8, #1a52c4); }
+    .ovs { background: linear-gradient(#f0303a, #c8141e); }
+    .balls { gap: 8px; }
+    .balls span { min-width: 26px; height: 26px; line-height: 26px; border-radius: 13px; background: #fff; border: 1px solid #c9ced8;
+      color: #1c2a5a; text-align: center; font-size: 15px; font-weight: 700; padding: 0 3px; box-sizing: border-box; }
+    .balls .w { background: #e8202a; border-color: #e8202a; color: #fff; }
+    .balls .f { background: #1f6fd1; border-color: #1f6fd1; color: #fff; }
+    .balls .s { background: #7a3fc4; border-color: #7a3fc4; color: #fff; }
+    .balls .x { background: #fff4d6; border-color: #f5b922; }
+    .stale .big { opacity: .5; }
+
+    /* Setup help, shown only until the first score arrives. */
+    #help { position: fixed; top: 16px; left: 16px; max-width: 520px; padding: 14px 16px; border-radius: 6px;
+      background: #fff; color: #1c2a5a; font: 14px/1.45 system-ui, sans-serif; box-shadow: 0 2px 10px rgba(0,0,0,.3); }
+    #help[hidden] { display: none; }
+    #help b { display: block; margin-bottom: 4px; font-size: 15px; }
+    #help button { margin-top: 8px; padding: 6px 12px; font: inherit; cursor: pointer; }
   </style>
 </head>
 <body>
-  <div class="crop">
-    <img id="overlayImg" alt="CricClubs overlay bottom" />
-  </div>
+  <div class="stage bottom" id="stage"><div id="ov"></div></div>
+  <div id="help" hidden></div>
 
   <script>
-    // Parse fixtureId and clubId from the page URL
-    const params = new URLSearchParams(window.location.search);
-    const matchId = params.get("matchId");
-    const clubId = params.get("clubId");
+    const params = new URLSearchParams(location.search);
+    const matchId = (params.get('matchId') || '').trim();
+    const clubId = (params.get('clubId') || '').trim();
+    const refresh = Math.max(5, Number(params.get('refresh')) || 15);
+    const bg = params.get('bg');
+    const pos = params.get('pos') === 'top' ? 'top' : 'bottom';
 
-    // Function to update the overlay image
-    function updateOverlay() {
-      if (matchId && clubId) {
-        // Add timestamp to prevent caching
-        const timestamp = new Date().getTime();
-        const overlayUrl = `https://overlayscore.cricclubs.com/overlay?matchId=${matchId}&clubId=${clubId}&t=${timestamp}`;
-        document.getElementById("overlayImg").src = overlayUrl;
-      } else {
-        console.warn("⚠️ Missing matchId or clubId in the URL query parameters");
-      }
+    document.documentElement.style.setProperty('--scale', Number(params.get('scale')) || 1);
+    if (bg) document.documentElement.style.setProperty('--bg', /^[0-9a-f]{3,8}$/i.test(bg) ? '#' + bg : bg);
+    document.getElementById('stage').className = 'stage ' + pos;
+
+    const root = document.getElementById('ov');
+    const help = document.getElementById('help');
+
+    const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const shortName = n => {
+      const w = String(n || '').replace(/[*†]/g, '').trim().split(/\s+/).filter(Boolean);
+      return (w.length > 1 ? w[0] + ' ' + w[w.length - 1][0] : w[0] || '').toUpperCase();
+    };
+    const oversToBalls = o => { const [a, b] = String(o).split('.'); return (Number(a) || 0) * 6 + (Number(b) || 0); };
+
+    function showHelp(html) { help.innerHTML = html; help.hidden = false; }
+
+    function render(d) {
+      const bat = d.teams[d.batIdx] || {};
+      const other = d.teams[1 - d.batIdx] || {};
+      const secondInnings = other.score && other.score !== '0/0';
+      const [runs, wkts] = (bat.score || '0/0').split('/');
+      const ballsBowled = oversToBalls(bat.overs);
+      const rr = ballsBowled ? (Number(runs) / (ballsBowled / 6)).toFixed(2) : '0.00';
+
+      // Striker first, with the bat icon.
+      const order = d.striker === 1 ? [1, 0] : [0, 1];
+      const batterCell = i => {
+        const b = d.batters[i];
+        if (!b) return '<span></span>';
+        return `<span class="bt">${i === d.striker ? '<i class="bat"></i>' : ''}${esc(shortName(b.name))}` +
+          `<b>${esc(b.r)}</b><small>${esc(b.b)}</small></span>`;
+      };
+      const ballCls = v => /W/i.test(v) ? 'w' : v === '4' ? 'f' : v === '6' ? 's' : /wd|nb|lb|b/i.test(v) ? 'x' : '';
+      // In the chase, show CricClubs' "need ..." line; otherwise the fixture.
+      const fixture = secondInnings && /need|target|require/i.test(d.info)
+        ? esc(d.info)
+        : `${esc((bat.name || '').toUpperCase())} <em>vs</em> ${esc((other.name || '').toUpperCase())}`;
+
+      root.innerHTML = `
+        <div class="panel left">
+          <div class="row top">${order.map(batterCell).join('')}</div>
+          <div class="row bottom fixture">${fixture}</div>
+        </div>
+        <div class="team-box">
+          <div class="codes">${esc(bat.code)}<em>v ${esc(other.code)}</em></div>
+          <div class="big">${esc(runs)}<em>/${esc(wkts)}</em></div>
+        </div>
+        <div class="rate-box">
+          <div class="rr">RR <b>${rr}</b></div>
+          <div class="ovs">OVERS <b>${esc(bat.overs)}</b></div>
+        </div>
+        <div class="panel right">
+          <div class="row top">${d.bowler ? `<span>${esc(shortName(d.bowler.name))}` +
+            `<b>${esc(d.bowler.r)}/${esc(d.bowler.w)}</b><small>${esc(d.bowler.o)}</small></span>` : ''}</div>
+          <div class="row bottom balls">${(d.balls || []).map(b => `<span class="${ballCls(b.v)}">${esc(b.v === '0' ? '•' : b.v)}</span>`).join('')}</div>
+        </div>`;
     }
 
-    // Initial load
-    updateOverlay();
+    let lastData = 0;
+    let popup = null;
 
-    // Refresh every 30 seconds
-    setInterval(updateOverlay, 30000);
+    window.addEventListener('message', e => {
+      if (!/^https:\/\/(www\.)?cricclubs\.com$/.test(e.origin)) return;
+      const msg = e.data;
+      if (!msg || msg.source !== 'cc-overlay') return;
+      if (msg.data && Array.isArray(msg.data.teams) && msg.data.teams.length) {
+        render(msg.data);
+        root.classList.remove('stale');
+        lastData = Date.now();
+        help.hidden = true;
+      } else if (msg.error) {
+        // Keep the last good score on screen; dim it so a stall is visible.
+        root.classList.add('stale');
+        console.warn('[cc-overlay]', msg.error);
+      }
+    });
+
+    if (!/^\d+$/.test(matchId) || !/^\d+$/.test(clubId)) {
+      showHelp('<b>Missing matchId or clubId</b>Open this page as <code>index.html?matchId=2127&amp;clubId=22909</code>.');
+    } else {
+      const feedUrl = `https://cricclubs.com/ballbyball.do?matchId=${matchId}&clubId=${clubId}#ccbridge&refresh=${refresh}`;
+      const askToConnect = () => {
+        showHelp(
+          '<b>Connect to CricClubs</b>' +
+          'Click below to open the CricClubs feed in a small window, and leave it open (it can sit behind this one). ' +
+          'Needs the <i>CricClubs Score Overlay</i> userscript (v3 or later) in Tampermonkey.' +
+          '<br><button type="button" id="openFeed">Open CricClubs feed</button>');
+        document.getElementById('openFeed').onclick = () => {
+          if (!popup || popup.closed) popup = window.open(feedUrl, 'ccfeed', 'width=480,height=360');
+          else popup.focus();
+        };
+      };
+      askToConnect();
+
+      // Feed window closed, or no score for 3 refreshes: ask again.
+      setInterval(() => {
+        const silent = Date.now() - lastData > refresh * 3000;
+        if (help.hidden && silent && (!popup || popup.closed)) askToConnect();
+      }, 5000);
+    }
   </script>
 </body>
 </html>
