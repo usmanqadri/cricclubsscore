@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CricClubs Score Overlay
 // @namespace    cricclubs-overlay
-// @version      3.2
+// @version      3.3
 // @description  Live CricClubs scorebar. #overlay on a scorecard URL draws it in the tab; #ccbridge feeds a hosted overlay page that embeds the scorecard.
 // @match        https://cricclubs.com/*viewScorecard.do*
 // @match        https://www.cricclubs.com/*viewScorecard.do*
@@ -163,9 +163,9 @@
         ${i === d.striker ? '<i class="bat"></i>' : ''}${esc(shortName(b.name))}
         <b>${esc(b.r)}</b><small>${esc(b.b)}</small></span>` : '<span></span>';
     const ballCls = v => v.toUpperCase() === 'W' ? 'w' : v === '4' ? 'f' : v === '6' ? 's' : /wd|nb|lb|b/i.test(v) ? 'x' : '';
-    // In the chase, show CricClubs' "need ..." line; otherwise the fixture.
+    // In the chase, show the target (opponent's total + 1) and CricClubs' "need ..." line; otherwise the fixture.
     const fixture = secondInnings && /need|target|require/i.test(d.info)
-      ? esc(chaseLine(d.info))
+      ? `TARGET ${Number(String(other.score).split('/')[0]) + 1} <em>·</em> ${esc(chaseLine(d.info))}`
       : `${esc((bat.name || '').toUpperCase())} <em>vs</em> ${esc((other.name || '').toUpperCase())}`;
 
     root.innerHTML = `
