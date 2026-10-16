@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CricClubs Score Overlay
 // @namespace    cricclubs-overlay
-// @version      3.1
+// @version      3.2
 // @description  Live CricClubs scorebar. #overlay on a scorecard URL draws it in the tab; #ccbridge feeds a hosted overlay page that embeds the scorecard.
 // @match        https://cricclubs.com/*viewScorecard.do*
 // @match        https://www.cricclubs.com/*viewScorecard.do*
@@ -20,13 +20,13 @@
   const BRIDGE = /(^|&)ccbridge\b/.test(hash);
   if (typeof GM_info !== 'undefined' && !BRIDGE && !/(^|&)overlay\b/.test(hash)) return;
 
-  // Options via hash, e.g. #overlay&bg=transparent&refresh=10&scale=1.5
+  // Options via hash, e.g. #overlay&bg=transparent&refresh=30&scale=1.5
   const opts = Object.fromEntries(hash.split('&').map(p => p.split('=')));
   const BG = opts.bg ? (/^[0-9a-f]{3,8}$/i.test(opts.bg) ? '#' + opts.bg : opts.bg) : '#00ff00';
-  const REFRESH_MS = Math.max(5, Number(opts.refresh) || 15) * 1000;
+  const REFRESH_MS = Math.max(15, Number(opts.refresh) || 60) * 1000;
   const SCALE = Number(opts.scale) || 1;
 
-  // Stop the page's own 60s full-page reload; we poll instead.
+  // Stop the page's own 60s full-page reload; we refresh in a hidden frame instead.
   const maxId = setTimeout(() => {}, 0);
   for (let i = 0; i <= maxId; i++) { clearTimeout(i); clearInterval(i); }
 
@@ -110,6 +110,28 @@
     return { teams, batIdx, batters, bowler, balls, striker, info };
   }
 
+  // Refresh: load the scorecard fresh in a hidden same-origin frame (a real page load, so anything
+  // CricClubs fills in with its own scripts is there too), read it, then throw the frame away.
+  function loadFresh(src) {
+    return new Promise((resolve, reject) => {
+      const frame = document.createElement('iframe');
+      frame.style.cssText = 'position:absolute;left:-9999px;width:1px;height:1px;border:0';
+      const done = (err, data) => { clearTimeout(timer); frame.remove(); err ? reject(err) : resolve(data); };
+      const timer = setTimeout(() => done(new Error('refresh timed out')), 45000);
+      frame.onload = () => {
+        try {
+          const doc = frame.contentDocument;
+          if (!doc || !doc.querySelector('.match-summary')) throw new Error('no scorecard in refreshed page');
+          done(null, parse(doc));
+        } catch (e) {
+          done(e);
+        }
+      };
+      frame.src = src;
+      document.body.appendChild(frame);
+    });
+  }
+
   // Bridge mode: this page is embedded (iframe) or opened (popup) by the hosted overlay page.
   // Send it the parsed score now and after every poll; the hosted page does the drawing.
   if (BRIDGE) {
@@ -118,28 +140,16 @@
     const src = location.href.split('#')[0];
     send({ data: parse(document) });
     document.body.innerHTML = '<p style="font:14px sans-serif">CricClubs overlay feed running. Keep this open.</p>';
-    setInterval(async () => {
-      try {
-        const res = await fetch(src, { credentials: 'include', cache: 'no-store' });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
-        if (!doc.querySelector('.match-summary')) throw new Error('no scorecard in response');
-        send({ data: parse(doc) });
-      } catch (e) {
-        send({ error: e.message });
-      }
-    }, REFRESH_MS);
+    setInterval(() => loadFresh(src).then(data => send({ data }), e => send({ error: e.message })), REFRESH_MS);
     return;
   }
 
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-  // "42 runs needed in 66 balls with 9 wickets remaining. RRR: 3.82" -> "NEED 42 OFF 66 · RRR 3.82"
+  // "42 runs needed in 66 balls with 9 wickets remaining. RRR: 3.82" -> "42 runs needed in 66 balls"
   const chaseLine = info => {
-    const m = String(info).match(/(\d+)\s+runs?\s+needed\s+in\s+(\d+)\s+balls?/i);
-    if (!m) return info;
-    const rrr = String(info).match(/RRR:?\s*([\d.]+)/i);
-    return `NEED ${m[1]} OFF ${m[2]}` + (rrr ? ` · RRR ${rrr[1]}` : '');
+    const m = String(info).match(/\d+\s+runs?\s+needed\s+in\s+\d+\s+balls?/i);
+    return m ? m[0] : info;
   };
   function render(d) {
     const bat = d.teams[d.batIdx] || {};
@@ -152,7 +162,7 @@
     const batterCell = (b, i) => b ? `<span class="bt${i === d.striker ? ' on' : ''}">
         ${i === d.striker ? '<i class="bat"></i>' : ''}${esc(shortName(b.name))}
         <b>${esc(b.r)}</b><small>${esc(b.b)}</small></span>` : '<span></span>';
-    const ballCls = v => /W/i.test(v) ? 'w' : v === '4' ? 'f' : v === '6' ? 's' : /wd|nb|lb|b/i.test(v) ? 'x' : '';
+    const ballCls = v => v.toUpperCase() === 'W' ? 'w' : v === '4' ? 'f' : v === '6' ? 's' : /wd|nb|lb|b/i.test(v) ? 'x' : '';
     // In the chase, show CricClubs' "need ..." line; otherwise the fixture.
     const fixture = secondInnings && /need|target|require/i.test(d.info)
       ? esc(chaseLine(d.info))
@@ -224,17 +234,13 @@
   document.body.removeAttribute('class');
   const root = document.getElementById('ov');
 
-  // Poll the ball-by-ball page for the same match (same matchId/clubId query).
+  // Refresh from the ball-by-ball page for the same match (same matchId/clubId query).
   const src = location.origin + location.pathname.replace(/[^/]+$/, 'ballbyball.do') + location.search;
   render(initial);
 
   async function tick() {
     try {
-      const res = await fetch(src, { credentials: 'include', cache: 'no-store' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
-      if (!doc.querySelector('.match-summary')) throw new Error('no scorecard in response');
-      render(parse(doc));
+      render(await loadFresh(src));
       root.classList.remove('stale');
     } catch (e) {
       // Keep the last good score on screen; dim it so a stall is visible.
