@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CricClubs Score Overlay
 // @namespace    cricclubs-overlay
-// @version      3.0
+// @version      3.1
 // @description  Live CricClubs scorebar. #overlay on a scorecard URL draws it in the tab; #ccbridge feeds a hosted overlay page that embeds the scorecard.
 // @match        https://cricclubs.com/*viewScorecard.do*
 // @match        https://www.cricclubs.com/*viewScorecard.do*
@@ -70,9 +70,11 @@
     const batters = rowsOf(tableByHead('Batter')).slice(0, 2).map(c => ({ name: c[0], r: c[1], b: c[2] }));
     const bowler = rowsOf(tableByHead('Bowler')).slice(0, 1).map(c => ({ name: c[0], o: c[1], r: c[3], w: c[4] }))[0];
 
-    // Ball-by-ball rows, newest first: "8.4 | Muhammad A to Balaji B, 0 run"
+    // Ball-by-ball rows, newest first: "8.4 | Muhammad A to Balaji B, 0 run".
+    // There is one section per innings (then super overs); the current one is the last that has balls.
     let balls = [], last = null;
-    const section = doc.querySelector('.ball-by-ball-section');
+    const hasBalls = sec => [...sec.querySelectorAll('ul.bbb-row li.col2 .ov')].some(o => clean(o.textContent));
+    const section = [...doc.querySelectorAll('.ball-by-ball-section')].filter(hasBalls).pop();
     if (section) {
       const all = [...section.querySelectorAll('ul.bbb-row')].map(u => {
         const col = u.querySelector('li.col2');
@@ -132,6 +134,13 @@
 
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+  // "42 runs needed in 66 balls with 9 wickets remaining. RRR: 3.82" -> "NEED 42 OFF 66 · RRR 3.82"
+  const chaseLine = info => {
+    const m = String(info).match(/(\d+)\s+runs?\s+needed\s+in\s+(\d+)\s+balls?/i);
+    if (!m) return info;
+    const rrr = String(info).match(/RRR:?\s*([\d.]+)/i);
+    return `NEED ${m[1]} OFF ${m[2]}` + (rrr ? ` · RRR ${rrr[1]}` : '');
+  };
   function render(d) {
     const bat = d.teams[d.batIdx] || {};
     const other = d.teams[1 - d.batIdx] || {};
@@ -146,7 +155,7 @@
     const ballCls = v => /W/i.test(v) ? 'w' : v === '4' ? 'f' : v === '6' ? 's' : /wd|nb|lb|b/i.test(v) ? 'x' : '';
     // In the chase, show CricClubs' "need ..." line; otherwise the fixture.
     const fixture = secondInnings && /need|target|require/i.test(d.info)
-      ? esc(d.info)
+      ? esc(chaseLine(d.info))
       : `${esc((bat.name || '').toUpperCase())} <em>vs</em> ${esc((other.name || '').toUpperCase())}`;
 
     root.innerHTML = `
