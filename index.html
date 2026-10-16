@@ -6,7 +6,7 @@
   <title>CricClubs Score Overlay</title>
   <!--
     Usage: index.html?matchId=2127&clubId=22909
-    Options: &refresh=15 (seconds)  &scale=1.5  &bg=transparent|00ff00|000000  &pos=bottom|top
+    Options: &refresh=60 (seconds, min 15)  &scale=1.5  &bg=transparent|00ff00|000000  &pos=bottom|top
 
     The score is read from https://cricclubs.com/ballbyball.do?matchId=..&clubId=.. opened in a small
     feed window. cricclubs.com does not let other sites read its pages, and its Cloudflare check blocks
@@ -77,7 +77,7 @@
     const params = new URLSearchParams(location.search);
     const matchId = (params.get('matchId') || '').trim();
     const clubId = (params.get('clubId') || '').trim();
-    const refresh = Math.max(5, Number(params.get('refresh')) || 15);
+    const refresh = Math.max(15, Number(params.get('refresh')) || 60);
     const bg = params.get('bg');
     const pos = params.get('pos') === 'top' ? 'top' : 'bottom';
 
@@ -97,12 +97,10 @@
 
     function showHelp(html) { help.innerHTML = html; help.hidden = false; }
 
-    // "42 runs needed in 66 balls with 9 wickets remaining. RRR: 3.82" -> "NEED 42 OFF 66 · RRR 3.82"
+    // "42 runs needed in 66 balls with 9 wickets remaining. RRR: 3.82" -> "42 runs needed in 66 balls"
     const chaseLine = info => {
-      const m = String(info).match(/(\d+)\s+runs?\s+needed\s+in\s+(\d+)\s+balls?/i);
-      if (!m) return info;
-      const rrr = String(info).match(/RRR:?\s*([\d.]+)/i);
-      return `NEED ${m[1]} OFF ${m[2]}` + (rrr ? ` · RRR ${rrr[1]}` : '');
+      const m = String(info).match(/\d+\s+runs?\s+needed\s+in\s+\d+\s+balls?/i);
+      return m ? m[0] : info;
     };
     function render(d) {
       const bat = d.teams[d.batIdx] || {};
@@ -120,7 +118,7 @@
         return `<span class="bt">${i === d.striker ? '<i class="bat"></i>' : ''}${esc(shortName(b.name))}` +
           `<b>${esc(b.r)}</b><small>${esc(b.b)}</small></span>`;
       };
-      const ballCls = v => /W/i.test(v) ? 'w' : v === '4' ? 'f' : v === '6' ? 's' : /wd|nb|lb|b/i.test(v) ? 'x' : '';
+      const ballCls = v => v.toUpperCase() === 'W' ? 'w' : v === '4' ? 'f' : v === '6' ? 's' : /wd|nb|lb|b/i.test(v) ? 'x' : '';
       // In the chase, show CricClubs' "need ..." line; otherwise the fixture.
       const fixture = secondInnings && /need|target|require/i.test(d.info)
         ? esc(chaseLine(d.info))
