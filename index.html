@@ -119,9 +119,9 @@
           `<b>${esc(b.r)}</b><small>${esc(b.b)}</small></span>`;
       };
       const ballCls = v => v.toUpperCase() === 'W' ? 'w' : v === '4' ? 'f' : v === '6' ? 's' : /wd|nb|lb|b/i.test(v) ? 'x' : '';
-      // In the chase, show CricClubs' "need ..." line; otherwise the fixture.
+      // In the chase, show the target (opponent's total + 1) and CricClubs' "need ..." line; otherwise the fixture.
       const fixture = secondInnings && /need|target|require/i.test(d.info)
-        ? esc(chaseLine(d.info))
+        ? `TARGET ${Number(String(other.score).split('/')[0]) + 1} <em>·</em> ${esc(chaseLine(d.info))}`
         : `${esc((bat.name || '').toUpperCase())} <em>vs</em> ${esc((other.name || '').toUpperCase())}`;
 
       root.innerHTML = `
